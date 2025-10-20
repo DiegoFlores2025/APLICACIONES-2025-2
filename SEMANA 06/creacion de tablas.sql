@@ -1,41 +1,57 @@
--- 1. Primero eliminar la tabla reserva (por las foreign keys)
-DROP TABLE IF EXISTS reserva;
+-- --------------------------------------------------------
+-- Esquema de Base de Datos para el Sistema de Reservas de Futsal
+-- Usamos InnoDB para soportar Transacciones y Claves Foráneas.
+-- --------------------------------------------------------
 
--- 2. Eliminar la tabla usuario
-DROP TABLE IF EXISTS usuario;
+--
+-- 1. Tabla de Usuarios (Para el Login y Roles)
+--
+CREATE TABLE usuarios (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL COMMENT 'Usado como nombre de usuario para el login',
+    password_hash VARCHAR(255) NOT NULL COMMENT 'Almacena la contraseña encriptada (hash)',
+    rol ENUM('admin', 'cliente') NOT NULL DEFAULT 'cliente' COMMENT 'Define los permisos: admin o cliente',
+    fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 3. Crear tabla usuario con contraseña
-CREATE TABLE usuario (
-  cod_usuario varchar(7) PRIMARY KEY,
-  dni_usuario int(8) NOT NULL UNIQUE,
-  password_usuario varchar(255) NOT NULL,
-  nombre_usuario varchar(100) NOT NULL,
-  apellido_usuario varchar(100) NOT NULL,
-  email_usuario varchar(150) NOT NULL UNIQUE,
-  telefono_usuario varchar(15) NOT NULL,
-  rol_usuario enum('CLIENTE','ADMIN') NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
+--
+-- 2. Tabla de Canchas (Inventario gestionado por el Admin)
+--
+CREATE TABLE canchas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL UNIQUE COMMENT 'Nombre descriptivo de la cancha (Ej: Cancha Principal A)',
+    capacidad INT NOT NULL COMMENT 'Capacidad de jugadores (Ej: 10 para 5v5)',
+    precio_hora DECIMAL(10, 2) NOT NULL COMMENT 'Precio de reserva por hora',
+    activa BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Indica si la cancha está disponible para reservar'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 4. Insertar usuarios con contraseñas
-INSERT INTO usuario (cod_usuario, dni_usuario, password_usuario, nombre_usuario, apellido_usuario, email_usuario, telefono_usuario, rol_usuario) VALUES
-('ADM001', 12345678, 'admin123', 'María', 'Gonzales López', 'maria.gonzales@sports.com', '987654321', 'ADMIN'),
-('CLI001', 87654321, 'cliente123', 'Carlos', 'Rodríguez Pérez', 'carlos.rodriguez@email.com', '912345678', 'CLIENTE');
+--
+-- 3. Tabla de Reservas (El corazón del CRUD)
+--
+CREATE TABLE reservas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    
+    -- Claves Foráneas para enlazar con Cancha y Cliente
+    cancha_id INT NOT NULL,
+    cliente_id INT NOT NULL,
+    
+    -- Detalles del Tiempo y Estado
+    fecha_hora_inicio DATETIME NOT NULL COMMENT 'Fecha y hora de inicio de la reserva',
+    fecha_hora_fin DATETIME NOT NULL COMMENT 'Fecha y hora de finalización de la reserva',
+    estado ENUM('Pendiente', 'Aprobada', 'Rechazada', 'Cancelada') NOT NULL DEFAULT 'Pendiente' COMMENT 'Estado actual de la solicitud de reserva',
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Definición de Claves Foráneas
+    FOREIGN KEY (cancha_id) REFERENCES canchas(id) ON DELETE RESTRICT ON UPDATE CASCADE,
+    FOREIGN KEY (cliente_id) REFERENCES usuarios(id) ON DELETE RESTRICT ON UPDATE CASCADE,
+    
+    -- Restricción para asegurar que la hora de inicio es anterior a la hora de fin
+    CONSTRAINT chk_tiempo CHECK (fecha_hora_inicio < fecha_hora_fin)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 5. Recrear la tabla reserva
-CREATE TABLE reserva (
-  id_reserva int(11) PRIMARY KEY AUTO_INCREMENT,
-  cod_usuario varchar(7) NOT NULL,
-  cod_cancha varchar(7) NOT NULL,
-  fecha_reserva date NOT NULL,
-  horaInicio_reserva time NOT NULL,
-  horaFin_reserva time NOT NULL,  
-  estado_reserva enum('Confirmada','Pendiente','Cancelada') NOT NULL DEFAULT 'Pendiente',
-  precio_reserva decimal(5,2) NOT NULL,
-  FOREIGN KEY (cod_usuario) REFERENCES usuario(cod_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
-  FOREIGN KEY (cod_cancha) REFERENCES cancha(cod_cancha) ON UPDATE CASCADE ON DELETE RESTRICT  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
--- 6. Insertar reservas de ejemplo
-INSERT INTO reserva (cod_usuario, cod_cancha, fecha_reserva, horaInicio_reserva, horaFin_reserva, estado_reserva, precio_reserva) VALUES 
-('CLI001', 'CAN001', '2024-01-20', '16:00:00', '18:00:00', 'Confirmada', 120.50),
-('CLI001', 'CAN002', '2024-01-21', '10:00:00', '11:30:00', 'Pendiente', 80.00);
+--
+-- Índices para mejorar la búsqueda y evitar conflictos
+--
+CREATE INDEX idx_reserva_tiempo ON reservas (fecha_hora_inicio, fecha_hora_fin);
+CREATE INDEX idx_reserva_estado ON reservas (estado);
